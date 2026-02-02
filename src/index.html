@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Barspec</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>Barspec</h1>
+        <p>Use a gamepad to drive the Beyond All Reason spectator camera.</p>
+      </header>
+
+      <section class="panel">
+        <div class="status">
+          <span class="label">Status</span>
+          <strong data-status>Idle</strong>
+        </div>
+        <div class="status">
+          <span class="label">Gamepad</span>
+          <strong data-pad>No gamepad detected</strong>
+        </div>
+        <label class="select">
+          <span>Use controller</span>
+          <select data-pad-select>
+            <option value="-1">Auto (first connected)</option>
+          </select>
+        </label>
+        <p class="hint">
+          If your controller shows as disconnected, click this window and press any
+          button to re-register it.
+        </p>
+      </section>
+
+      <section class="panel">
+        <label class="slider">
+          <span>Sensitivity</span>
+          <input
+            data-sensitivity
+            type="range"
+            min="0.4"
+            max="2.5"
+            step="0.05"
+            value="1.0"
+          />
+          <span class="value" data-sensitivity-value>1.00</span>
+        </label>
+        <label class="slider">
+          <span>Deadzone</span>
+          <input
+            data-deadzone
+            type="range"
+            min="0.05"
+            max="0.4"
+            step="0.01"
+            value="0.2"
+          />
+          <span class="value" data-deadzone-value>0.20</span>
+        </label>
+      </section>
+
+      <section class="panel">
+        <button class="primary" data-active>Start camera control</button>
+        <div class="hint">
+          Press the gamepad <strong>Start</strong> button to toggle control.
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Default bindings</h2>
+        <ul>
+          <li>Left stick: WASD pan</li>
+          <li>Right stick: mouse movement (camera look)</li>
+          <li>Triggers: zoom in/out</li>
+          <li>Right stick up/down: Up/Down keys (tilt)</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
