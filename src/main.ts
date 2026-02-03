@@ -9,12 +9,20 @@ interface CameraInput {
   rightY: number;
   leftTrigger: number;
   rightTrigger: number;
+  buttonA: boolean;
+  buttonY: boolean;
+  dpadX: number;
+  dpadY: number;
   sensitivity: number;
   deadzone: number;
 }
 
 const keyState = new Map<string, boolean>();
 let isActive = false;
+let invertY = false;
+let lastButtonY = false;
+let middleClickHeld = false;
+let altHeld = false;
 
 const ensureKey = (key: string, pressed: boolean) => {
   const current = keyState.get(key) ?? false;
@@ -31,6 +39,14 @@ const releaseAllKeys = () => {
       keyState.set(key, false);
     }
   }
+  if (middleClickHeld) {
+    robot.mouseToggle("up", "middle");
+    middleClickHeld = false;
+  }
+  if (altHeld) {
+    robot.keyToggle("alt", "up");
+    altHeld = false;
+  }
 };
 
 const applyInput = (input: CameraInput) => {
@@ -39,28 +55,82 @@ const applyInput = (input: CameraInput) => {
     return;
   }
 
+  // Handle Y-axis inversion toggle
+  if (input.buttonY && !lastButtonY) {
+    invertY = !invertY;
+  }
+  lastButtonY = input.buttonY;
+
   const deadzone = Math.max(0, Math.min(input.deadzone, 0.5));
-  const sensitivity = Math.max(0.1, Math.min(input.sensitivity, 3));
+  const sensitivity = Math.max(0.1, Math.min(input.sensitivity, 5));
 
-  const leftX = Math.abs(input.leftX) > deadzone ? input.leftX : 0;
-  const leftY = Math.abs(input.leftY) > deadzone ? input.leftY : 0;
-  const rightX = Math.abs(input.rightX) > deadzone ? input.rightX : 0;
-  const rightY = Math.abs(input.rightY) > deadzone ? input.rightY : 0;
+  const applyStickDeadzone = (val: number) => {
+    if (Math.abs(val) < deadzone) return 0;
+    const sign = val > 0 ? 1 : -1;
+    return sign * ((Math.abs(val) - deadzone) / (1 - deadzone));
+  };
 
-  ensureKey("a", leftX < -deadzone);
-  ensureKey("d", leftX > deadzone);
-  ensureKey("w", leftY < -deadzone);
-  ensureKey("s", leftY > deadzone);
+  const leftX = applyStickDeadzone(input.leftX);
+  const leftY = applyStickDeadzone(input.leftY);
+  const rightX = applyStickDeadzone(input.rightX);
+  const rightY = applyStickDeadzone(input.rightY);
 
-  ensureKey("q", rightX < -deadzone);
-  ensureKey("e", rightX > deadzone);
-  ensureKey("up", rightY < -deadzone);
-  ensureKey("down", rightY > deadzone);
+  // Mouse Look (Left Stick)
+  if (leftX !== 0 || leftY !== 0) {
+    const dx = Math.round(leftX * sensitivity * 10);
+    const dy = Math.round((invertY ? -leftY : leftY) * sensitivity * 10);
+    if (dx !== 0 || dy !== 0) {
+      const mouse = robot.getMousePos();
+      robot.moveMouse(mouse.x + dx, mouse.y + dy);
+    }
+  }
 
-  const triggerDelta = input.rightTrigger - input.leftTrigger;
-  const wheelAmount = Math.round(triggerDelta * 60 * sensitivity);
-  if (wheelAmount !== 0) {
-    robot.scrollMouse(0, wheelAmount);
+  // Mouse Pan (Right Stick + Alt + Middle Click)
+  const rightActive = rightX !== 0 || rightY !== 0;
+  if (rightActive) {
+    if (!altHeld) {
+      robot.keyToggle("alt", "down");
+      altHeld = true;
+    }
+    if (!middleClickHeld) {
+      robot.mouseToggle("down", "middle");
+      middleClickHeld = true;
+    }
+    const dx = Math.round(rightX * sensitivity * 10);
+    const dy = Math.round((invertY ? -rightY : rightY) * sensitivity * 10);
+    if (dx !== 0 || dy !== 0) {
+      const mouse = robot.getMousePos();
+      robot.moveMouse(mouse.x + dx, mouse.y + dy);
+    }
+  } else {
+    // Only release if Button A is not also holding it
+    if (altHeld) {
+      robot.keyToggle("alt", "up");
+      altHeld = false;
+    }
+    if (middleClickHeld && !input.buttonA) {
+      robot.mouseToggle("up", "middle");
+      middleClickHeld = false;
+    }
+  }
+
+  // D-Pad (Arrow Keys)
+  ensureKey("up", input.dpadY < 0);
+  ensureKey("down", input.dpadY > 0);
+  ensureKey("left", input.dpadX < 0);
+  ensureKey("right", input.dpadX > 0);
+
+  // Triggers (PageUp / PageDown)
+  ensureKey("pageup", input.leftTrigger > 0.3);
+  ensureKey("pagedown", input.rightTrigger > 0.3);
+
+  // Button A (Middle Click)
+  if (input.buttonA && !middleClickHeld) {
+    robot.mouseToggle("down", "middle");
+    middleClickHeld = true;
+  } else if (!input.buttonA && middleClickHeld && !rightActive) {
+    robot.mouseToggle("up", "middle");
+    middleClickHeld = false;
   }
 };
 
