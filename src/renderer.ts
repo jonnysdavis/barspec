@@ -1,3 +1,5 @@
+export {};
+
 type BarspecBridge = {
   sendInput: (input: CameraInput) => void;
   setActive: (active: boolean) => void;
@@ -16,6 +18,10 @@ interface CameraInput {
   rightY: number;
   leftTrigger: number;
   rightTrigger: number;
+  buttonA: boolean;
+  buttonY: boolean;
+  dpadX: number;
+  dpadY: number;
   sensitivity: number;
   deadzone: number;
 }
@@ -68,6 +74,16 @@ const readTriggers = (gamepad: Gamepad) => {
   return { leftTrigger, rightTrigger };
 };
 
+const readDpad = (gamepad: Gamepad) => {
+  let x = 0;
+  let y = 0;
+  if (gamepad.buttons[12]?.pressed) y -= 1; // Up
+  if (gamepad.buttons[13]?.pressed) y += 1; // Down
+  if (gamepad.buttons[14]?.pressed) x -= 1; // Left
+  if (gamepad.buttons[15]?.pressed) x += 1; // Right
+  return { dpadX: x, dpadY: y };
+};
+
 const pollGamepad = () => {
   const pads = navigator.getGamepads();
   const gamepad = pads[0];
@@ -93,6 +109,9 @@ const pollGamepad = () => {
       rightX: gamepad.axes[2] ?? 0,
       rightY: gamepad.axes[3] ?? 0,
       ...readTriggers(gamepad),
+      ...readDpad(gamepad),
+      buttonA: gamepad.buttons[0]?.pressed ?? false,
+      buttonY: gamepad.buttons[3]?.pressed ?? false,
       sensitivity: Number(sensitivityEl.value),
       deadzone: Number(deadzoneEl.value),
     };
