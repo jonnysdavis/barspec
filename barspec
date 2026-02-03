@@ -1,0 +1,419 @@
+"""
+Gamepad to Mouse/Keyboard Controller for Beyond All Reason Spectating
+Converts Xbox controller input to mouse movements and arrow key commands
+
+Requirements:
+    pip install pygame pyautogui pynput
+
+Usage:
+    python gamepad_controller.py
+    
+Controls:
+    - Left Stick: Camera look (mouse movement)
+    - Right Stick: Camera pan (mouse movement while holding Alt+Middle Click)
+    - D-Pad: Camera pan (Arrow keys)
+    - A Button: Hold for Middle Click
+    - L2 Trigger: Page Up (zoom in)
+    - R2 Trigger: Page Down (zoom out)
+    - Press START button to enable/disable
+    - Press BACK button to quit
+"""
+
+import pygame
+import pyautogui
+from pynput.keyboard import Controller as KeyboardController, Key
+import time
+import sys
+from typing import Set
+
+class GamepadController:
+    def __init__(self):
+        # Initialize pygame
+        pygame.init()
+        pygame.joystick.init()
+        
+        # Settings
+        self.look_sensitivity = 2.0
+        self.deadzone = 0.15
+        self.invert_y = False
+        self.enabled = False
+        self.running = True
+        
+        # Keyboard controller
+        self.keyboard = KeyboardController()
+        self.keys_pressed: Set[Key] = set()
+        
+        # Mouse button states
+        self.middle_click_held = False
+        self.alt_held = False
+        
+        # Check for gamepad
+        self.joystick = None
+        self.connect_gamepad()
+        
+        # Disable PyAutoGUI failsafe
+        pyautogui.FAILSAFE = False
+        
+        # Set mouse movement speed (lower = smoother but slower)
+        pyautogui.PAUSE = 0
+        
+    def connect_gamepad(self):
+        """Connect to the first available gamepad"""
+        if pygame.joystick.get_count() == 0:
+            print("No gamepad detected! Please connect an Xbox controller.")
+            return False
+        
+        self.joystick = pygame.joystick.Joystick(0)
+        self.joystick.init()
+        print(f"Connected to: {self.joystick.get_name()}")
+        print(f"Axes: {self.joystick.get_numaxes()}")
+        print(f"Buttons: {self.joystick.get_numbuttons()}")
+        return True
+    
+    def apply_deadzone(self, value: float) -> float:
+        """Apply deadzone to stick input"""
+        if abs(value) < self.deadzone:
+            return 0.0
+        sign = 1 if value > 0 else -1
+        return sign * ((abs(value) - self.deadzone) / (1 - self.deadzone))
+    
+    def press_key(self, key: Key):
+        """Press a keyboard key"""
+        if key not in self.keys_pressed:
+            self.keys_pressed.add(key)
+            self.keyboard.press(key)
+    
+    def release_key(self, key: Key):
+        """Release a keyboard key"""
+        if key in self.keys_pressed:
+            self.keys_pressed.remove(key)
+            self.keyboard.release(key)
+    
+    def release_all_keys(self):
+        """Release all currently pressed keys"""
+        for key in list(self.keys_pressed):
+            self.keyboard.release(key)
+        self.keys_pressed.clear()
+        
+        # Release mouse buttons and alt
+        if self.middle_click_held:
+            pyautogui.mouseUp(button='middle')
+            self.middle_click_held = False
+        if self.alt_held:
+            self.keyboard.release(Key.alt)
+            self.alt_held = False
+    
+    def handle_dpad(self):
+        """Handle D-Pad for arrow key presses"""
+        # D-Pad is usually on buttons 11-14 or hat 0
+        # Try hat first (more reliable)
+        if self.joystick.get_numhats() > 0:
+            hat = self.joystick.get_hat(0)
+            dpad_x = hat[0]
+            dpad_y = hat[1]
+            
+            # Up/Down
+            if dpad_y > 0:
+                self.press_key(Key.up)
+            else:
+                self.release_key(Key.up)
+            
+            if dpad_y < 0:
+                self.press_key(Key.down)
+            else:
+                self.release_key(Key.down)
+            
+            # Left/Right
+            if dpad_x < 0:
+                self.press_key(Key.left)
+            else:
+                self.release_key(Key.left)
+            
+            if dpad_x > 0:
+                self.press_key(Key.right)
+            else:
+                self.release_key(Key.right)
+        else:
+            # Fallback to buttons if no hat
+            num_buttons = self.joystick.get_numbuttons()
+            if num_buttons >= 15:
+                # Xbox controller: buttons 11-14 are D-pad (may vary)
+                # Try common mappings
+                if self.joystick.get_button(11):  # Up
+                    self.press_key(Key.up)
+                else:
+                    self.release_key(Key.up)
+                
+                if self.joystick.get_button(12):  # Down
+                    self.press_key(Key.down)
+                else:
+                    self.release_key(Key.down)
+                
+                if self.joystick.get_button(13):  # Left
+                    self.press_key(Key.left)
+                else:
+                    self.release_key(Key.left)
+                
+                if self.joystick.get_button(14):  # Right
+                    self.press_key(Key.right)
+                else:
+                    self.release_key(Key.right)
+    
+    def handle_look_stick(self, x: float, y: float):
+        """Handle left stick for mouse look"""
+        if abs(x) > 0 or abs(y) > 0:
+            # Calculate mouse movement delta
+            delta_x = int(x * self.look_sensitivity * 10)
+            delta_y = int((y if not self.invert_y else -y) * self.look_sensitivity * 10)
+            
+            # Move mouse relative to current position
+            if delta_x != 0 or delta_y != 0:
+                pyautogui.moveRel(delta_x, delta_y, _pause=False)
+    
+    def handle_right_stick(self, x: float, y: float):
+        """Handle right stick for mouse pan (with Alt+Middle Click held)"""
+        if abs(x) > 0 or abs(y) > 0:
+            # Hold Alt and Middle Click while moving
+            if not self.alt_held:
+                self.keyboard.press(Key.alt)
+                self.alt_held = True
+            if not self.middle_click_held:
+                pyautogui.mouseDown(button='middle')
+                self.middle_click_held = True
+            
+            # Calculate mouse movement delta
+            delta_x = int(x * self.look_sensitivity * 10)
+            delta_y = int((y if not self.invert_y else -y) * self.look_sensitivity * 10)
+            
+            # Move mouse relative to current position
+            if delta_x != 0 or delta_y != 0:
+                pyautogui.moveRel(delta_x, delta_y, _pause=False)
+        else:
+            # Release Alt and Middle Click when stick returns to center
+            if self.alt_held:
+                self.keyboard.release(Key.alt)
+                self.alt_held = False
+            if self.middle_click_held:
+                pyautogui.mouseUp(button='middle')
+                self.middle_click_held = False
+    
+    def handle_triggers(self):
+        """Handle L2 and R2 triggers for Page Up/Down"""
+        # L2 is typically axis 2, R2 is axis 5 (or buttons 6 and 7)
+        # Try axes first
+        try:
+            if self.joystick.get_numaxes() >= 6:
+                # On Xbox controller: axis 2 = LT, axis 5 = RT
+                l2_value = self.joystick.get_axis(2)
+                r2_value = self.joystick.get_axis(5)
+                
+                # Triggers usually go from -1 (not pressed) to 1 (fully pressed)
+                # Or from 0 to 1 depending on driver
+                l2_pressed = l2_value > 0.3
+                r2_pressed = r2_value > 0.3
+            else:
+                # Fallback to buttons
+                l2_pressed = self.joystick.get_button(6) if self.joystick.get_numbuttons() > 6 else False
+                r2_pressed = self.joystick.get_button(7) if self.joystick.get_numbuttons() > 7 else False
+            
+            # L2 = Page Up (zoom in)
+            if l2_pressed:
+                self.press_key(Key.page_up)
+            else:
+                self.release_key(Key.page_up)
+            
+            # R2 = Page Down (zoom out)
+            if r2_pressed:
+                self.press_key(Key.page_down)
+            else:
+                self.release_key(Key.page_down)
+                
+        except Exception as e:
+            # If axis reading fails, try buttons
+            try:
+                l2_pressed = self.joystick.get_button(6)
+                r2_pressed = self.joystick.get_button(7)
+                
+                if l2_pressed:
+                    self.press_key(Key.page_up)
+                else:
+                    self.release_key(Key.page_up)
+                
+                if r2_pressed:
+                    self.press_key(Key.page_down)
+                else:
+                    self.release_key(Key.page_down)
+            except:
+                pass
+    
+    def handle_a_button(self):
+        """Handle A button for middle click"""
+        try:
+            # A button is typically button 0 on Xbox controller
+            a_pressed = self.joystick.get_button(0)
+            
+            if a_pressed and not self.middle_click_held:
+                pyautogui.mouseDown(button='middle')
+                self.middle_click_held = True
+            elif not a_pressed and self.middle_click_held:
+                pyautogui.mouseUp(button='middle')
+                self.middle_click_held = False
+        except:
+            pass
+    
+    def print_status(self):
+        """Print current status"""
+        status = "ENABLED ✓" if self.enabled else "DISABLED"
+        print(f"\r[{status}] Sensitivity: {self.look_sensitivity:.1f} | Deadzone: {self.deadzone:.2f} | Invert Y: {self.invert_y}", end="", flush=True)
+    
+    def run(self):
+        """Main loop"""
+        print("\n" + "="*70)
+        print("Gamepad Camera Controller for Beyond All Reason")
+        print("="*70)
+        print("\nControls:")
+        print("  Left Stick    - Camera look (Mouse movement)")
+        print("  Right Stick   - Camera pan (Mouse movement with Alt+Middle Click)")
+        print("  D-Pad         - Camera pan (Arrow keys)")
+        print("  A Button      - Middle Click (hold)")
+        print("  L2 Trigger    - Zoom in (Page Up)")
+        print("  R2 Trigger    - Zoom out (Page Down)")
+        print("\nSettings:")
+        print("  START button  - Enable/Disable controller")
+        print("  BACK button   - Quit application")
+        print("  D-Pad (when disabled):")
+        print("    Up/Down     - Adjust look sensitivity")
+        print("    Left/Right  - Adjust deadzone")
+        print("  Y button      - Toggle Y-axis inversion")
+        print("\n" + "="*70)
+        print("\nTip: Run Beyond All Reason in WINDOWED or BORDERLESS mode")
+        print("     Fullscreen mode may block inputs from this tool.")
+        print("\nWaiting for input...\n")
+        
+        clock = pygame.time.Clock()
+        last_sensitivity_change = 0
+        last_deadzone_change = 0
+        
+        while self.running:
+            current_time = time.time()
+            
+            # Process pygame events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    # START button (button 7 on Xbox controller) - Toggle enable
+                    if event.button == 7:
+                        self.enabled = not self.enabled
+                        if not self.enabled:
+                            self.release_all_keys()
+                        print(f"\n{'='*70}")
+                        print(f"Controller {'ENABLED ✓' if self.enabled else 'DISABLED'}")
+                        print('='*70)
+                    
+                    # BACK button (button 6) - Quit
+                    elif event.button == 6:
+                        print("\n\nQuitting...")
+                        self.running = False
+                    
+                    # Y button (button 3) - Toggle invert Y
+                    elif event.button == 3:
+                        self.invert_y = not self.invert_y
+                        print(f"\nY-axis invert: {'ON' if self.invert_y else 'OFF'}")
+            
+            # Only allow settings changes when disabled
+            if not self.enabled and self.joystick.get_numhats() > 0:
+                hat = self.joystick.get_hat(0)
+                
+                # D-Pad Up/Down for sensitivity (with rate limiting)
+                if current_time - last_sensitivity_change > 0.2:
+                    if hat[1] > 0:  # Up
+                        self.look_sensitivity = min(5.0, self.look_sensitivity + 0.1)
+                        print(f"\nLook sensitivity: {self.look_sensitivity:.1f}")
+                        last_sensitivity_change = current_time
+                    elif hat[1] < 0:  # Down
+                        self.look_sensitivity = max(0.5, self.look_sensitivity - 0.1)
+                        print(f"\nLook sensitivity: {self.look_sensitivity:.1f}")
+                        last_sensitivity_change = current_time
+                
+                # D-Pad Left/Right for deadzone (with rate limiting)
+                if current_time - last_deadzone_change > 0.2:
+                    if hat[0] > 0:  # Right
+                        self.deadzone = min(0.3, self.deadzone + 0.01)
+                        print(f"\nDeadzone: {self.deadzone:.2f}")
+                        last_deadzone_change = current_time
+                    elif hat[0] < 0:  # Left
+                        self.deadzone = max(0.0, self.deadzone - 0.01)
+                        print(f"\nDeadzone: {self.deadzone:.2f}")
+                        last_deadzone_change = current_time
+            
+            if self.joystick and self.enabled:
+                try:
+                    # Read left stick for mouse control
+                    left_x = self.apply_deadzone(self.joystick.get_axis(0))
+                    left_y = self.apply_deadzone(self.joystick.get_axis(1))
+                    
+                    # Read right stick for alt+middle click pan
+                    # Right stick is typically axes 2 and 3 (or 3 and 4 on some controllers)
+                    if self.joystick.get_numaxes() >= 5:
+                        right_x = self.apply_deadzone(self.joystick.get_axis(3))
+                        right_y = self.apply_deadzone(self.joystick.get_axis(4))
+                    else:
+                        right_x = self.apply_deadzone(self.joystick.get_axis(2))
+                        right_y = self.apply_deadzone(self.joystick.get_axis(3))
+                    
+                    # Handle mouse movement with left stick
+                    self.handle_look_stick(left_x, left_y)
+                    
+                    # Handle right stick for alt+middle click pan
+                    self.handle_right_stick(right_x, right_y)
+                    
+                    # Handle D-Pad for arrow keys
+                    self.handle_dpad()
+                    
+                    # Handle triggers for Page Up/Down
+                    self.handle_triggers()
+                    
+                    # Handle A button for middle click
+                    self.handle_a_button()
+                    
+                except Exception as e:
+                    print(f"\nError reading joystick: {e}")
+            
+            elif not self.enabled:
+                # Make sure all keys are released when disabled
+                self.release_all_keys()
+            
+            self.print_status()
+            
+            # Run at 60 FPS for smooth input
+            clock.tick(60)
+        
+        # Cleanup
+        self.release_all_keys()
+        pygame.quit()
+        print("\n\nController disconnected. Goodbye!\n")
+
+def main():
+    try:
+        controller = GamepadController()
+        if controller.joystick:
+            controller.run()
+        else:
+            print("\nPlease connect an Xbox controller and try again.")
+            print("Press Enter to exit...")
+            input()
+            pygame.quit()
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user. Exiting...")
+        pygame.quit()
+    except Exception as e:
+        print(f"\nError: {e}")
+        print("\nPress Enter to exit...")
+        input()
+        pygame.quit()
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
