@@ -35,15 +35,29 @@ let lastStartPressed = false;
 let currentConfig = null;
 let selectedGamepadIndex = null;
 // Environment Check
+console.log("Renderer process starting...");
+console.log("Protocol:", window.location.protocol);
+console.log("Pathname:", window.location.pathname);
 if (!window.barspec) {
     const warn = document.createElement("div");
     warn.className = "env-warning";
-    warn.innerHTML = `
+    let warnMsg = `
     <strong>⚠️ Running in Browser Mode</strong>
     <p>Barspec must be run as a desktop application to control your mouse and keyboard.
     Input injection is disabled in your web browser for security.</p>
   `;
-    appEl.prepend(warn);
+    if (window.location.protocol === "file:" && window.location.pathname.includes("/src/")) {
+        warnMsg += `
+      <p style="color: #ef4444; margin-top: 10px;">
+        <strong>Notice:</strong> You are opening <code>src/index.html</code>.
+        This is the source directory and lacks the compiled JavaScript.
+        Please run <code>npm start</code> in your terminal.
+      </p>
+    `;
+    }
+    warn.innerHTML = warnMsg;
+    if (appEl)
+        appEl.prepend(warn);
 }
 const setActive = (active) => {
     if (!window.barspec)
@@ -167,7 +181,7 @@ function addButtonConfig(container, name, index, current) {
 }
 ;
 const pollGamepad = () => {
-    const pads = navigator.getGamepads();
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     let gamepad = null;
     // Detailed Diagnostic info
     let debugHtml = "<strong>Detailed Diagnostics:</strong><ul style='padding-left:15px; margin:5px 0;'>";
@@ -259,4 +273,6 @@ document.querySelector("[data-refresh]")?.addEventListener("click", () => {
     const pads = navigator.getGamepads();
     console.table(pads);
 });
+// Signal that renderer is loaded
+window.barspecLoaded = true;
 requestAnimationFrame(pollGamepad);
