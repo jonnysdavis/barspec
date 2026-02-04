@@ -52,6 +52,7 @@ const deadzoneEl = document.querySelector("[data-deadzone]") as HTMLInputElement
 const sensitivityValue = document.querySelector("[data-sensitivity-value]") as HTMLElement;
 const deadzoneValue = document.querySelector("[data-deadzone-value]") as HTMLElement;
 const debugInfoEl = document.querySelector("[data-debug-info]") as HTMLElement;
+const appEl = document.querySelector(".app") as HTMLElement;
 
 const actionNames: Record<Action, string> = {
   left_click: "Left Click",
@@ -81,7 +82,20 @@ let lastStartPressed = false;
 let currentConfig: MappingConfig | null = null;
 let selectedGamepadIndex: number | null = null;
 
+// Environment Check
+if (!window.barspec) {
+  const warn = document.createElement("div");
+  warn.className = "env-warning";
+  warn.innerHTML = `
+    <strong>⚠️ Running in Browser Mode</strong>
+    <p>Barspec must be run as a desktop application to control your mouse and keyboard.
+    Input injection is disabled in your web browser for security.</p>
+  `;
+  appEl.prepend(warn);
+}
+
 const setActive = (active: boolean) => {
+  if (!window.barspec) return;
   isActive = active;
   activeBtn.textContent = isActive ? "Stop camera control" : "Start camera control";
   activeBtn.classList.toggle("active", isActive);
@@ -94,7 +108,7 @@ activeBtn.addEventListener("click", () => {
 });
 
 const updateConfigFromUI = () => {
-  if (!currentConfig) return;
+  if (!currentConfig || !window.barspec) return;
   currentConfig.sensitivity = parseFloat(sensitivityEl.value);
   currentConfig.deadzone = parseFloat(deadzoneEl.value);
   sensitivityValue.textContent = currentConfig.sensitivity.toFixed(2);
@@ -121,19 +135,31 @@ const updateLabels = () => {
   if (rightLabel) rightLabel.textContent = stickActionNames[currentConfig.rightStickAction];
 };
 
-window.barspec.onConfigLoaded((config) => {
-  currentConfig = config;
-  sensitivityEl.value = config.sensitivity.toString();
-  deadzoneEl.value = config.deadzone.toString();
-  sensitivityValue.textContent = config.sensitivity.toFixed(2);
-  deadzoneValue.textContent = config.deadzone.toFixed(2);
+if (window.barspec) {
+  window.barspec.onConfigLoaded((config) => {
+    currentConfig = config;
+    sensitivityEl.value = config.sensitivity.toString();
+    deadzoneEl.value = config.deadzone.toString();
+    sensitivityValue.textContent = config.sensitivity.toFixed(2);
+    deadzoneValue.textContent = config.deadzone.toFixed(2);
+    updateLabels();
+    setupConfigUI();
+  });
+  window.barspec.getConfig();
+} else {
+  // Mock config for browser preview
+  currentConfig = {
+    sensitivity: 1.0,
+    deadzone: 0.15,
+    leftStickAction: "mouse_move",
+    rightStickAction: "mouse_pan",
+    buttonMappings: Array(16).fill("none")
+  };
   updateLabels();
   setupConfigUI();
-});
+}
 
-window.barspec.getConfig();
-
-const setupConfigUI = () => {
+function setupConfigUI() {
   if (!currentConfig) return;
 
   const configList = document.querySelector("[data-config-list]") as HTMLElement;
@@ -154,7 +180,7 @@ const setupConfigUI = () => {
   });
 };
 
-const addStickConfig = (container: HTMLElement, name: string, key: "leftStickAction" | "rightStickAction", current: StickAction) => {
+function addStickConfig(container: HTMLElement, name: string, key: "leftStickAction" | "rightStickAction", current: StickAction) {
   const row = document.createElement("div");
   row.className = "config-row";
   row.innerHTML = `
@@ -165,7 +191,7 @@ const addStickConfig = (container: HTMLElement, name: string, key: "leftStickAct
   `;
   const select = row.querySelector("select") as HTMLSelectElement;
   select.addEventListener("change", () => {
-    if (currentConfig) {
+    if (currentConfig && window.barspec) {
       currentConfig[key] = select.value as StickAction;
       window.barspec.saveConfig(currentConfig);
       updateLabels();
@@ -174,7 +200,7 @@ const addStickConfig = (container: HTMLElement, name: string, key: "leftStickAct
   container.appendChild(row);
 };
 
-const addButtonConfig = (container: HTMLElement, name: string, index: number, current: Action) => {
+function addButtonConfig(container: HTMLElement, name: string, index: number, current: Action) {
   const row = document.createElement("div");
   row.className = "config-row";
   row.innerHTML = `
@@ -185,7 +211,7 @@ const addButtonConfig = (container: HTMLElement, name: string, index: number, cu
   `;
   const select = row.querySelector("select") as HTMLSelectElement;
   select.addEventListener("change", () => {
-    if (currentConfig) {
+    if (currentConfig && window.barspec) {
       currentConfig.buttonMappings[index] = select.value as Action;
       window.barspec.saveConfig(currentConfig);
       updateLabels();
@@ -198,12 +224,23 @@ const pollGamepad = () => {
   const pads = navigator.getGamepads();
   let gamepad: Gamepad | null = null;
 
-  // Debug info
-  let debugText = "Slots: ";
+  // Detailed Diagnostic info
+  let debugHtml = "<strong>Detailed Diagnostics:</strong><ul style='padding-left:15px; margin:5px 0;'>";
+  let anyFound = false;
   for (let i = 0; i < pads.length; i++) {
-    debugText += `[${i}: ${pads[i] ? 'OK' : 'null'}] `;
+    const p = pads[i];
+    if (p) {
+      anyFound = true;
+      debugHtml += `<li>Slot ${i}: <span style='color:#4f6ef7'>${p.id}</span> (Mapping: ${p.mapping})</li>`;
+    } else {
+      debugHtml += `<li>Slot ${i}: <span style='opacity:0.5'>null</span></li>`;
+    }
   }
-  if (debugInfoEl) debugInfoEl.textContent = debugText;
+  debugHtml += "</ul>";
+  if (!anyFound) {
+    debugHtml += "<p style='color:#ef4444'>No gamepads reported by system. Try pressing a button or reconnecting.</p>";
+  }
+  if (debugInfoEl) debugInfoEl.innerHTML = debugHtml;
 
   // Try to find the selected gamepad or the first available one
   if (selectedGamepadIndex !== null && pads[selectedGamepadIndex]) {
@@ -219,7 +256,7 @@ const pollGamepad = () => {
   }
 
   if (!gamepad) {
-    padEl.textContent = "No gamepad detected (Press a button)";
+    padEl.textContent = "No gamepad detected";
     requestAnimationFrame(pollGamepad);
     return;
   }
@@ -232,7 +269,7 @@ const pollGamepad = () => {
   }
   lastStartPressed = startPressed;
 
-  if (isActive) {
+  if (isActive && window.barspec) {
     const state: GamepadState = {
       axes: Array.from(gamepad.axes),
       buttons: gamepad.buttons.map((b) => b.pressed),
@@ -248,14 +285,14 @@ const pollGamepad = () => {
   // Sticks feedback
   const ls = document.querySelector(`[data-stick="ls"]`) as HTMLElement;
   if (ls) {
-    const lx = gamepad.axes[0] * 10;
-    const ly = gamepad.axes[1] * 10;
+    const lx = (gamepad.axes[0] || 0) * 10;
+    const ly = (gamepad.axes[1] || 0) * 10;
     ls.style.transform = `translate(${lx}px, ${ly}px)`;
   }
   const rs = document.querySelector(`[data-stick="rs"]`) as HTMLElement;
   if (rs) {
-    const rx = gamepad.axes[2] * 10;
-    const ry = gamepad.axes[3] * 10;
+    const rx = (gamepad.axes[2] || 0) * 10;
+    const ry = (gamepad.axes[3] || 0) * 10;
     rs.style.transform = `translate(${rx}px, ${ry}px)`;
   }
 
@@ -274,6 +311,14 @@ window.addEventListener("gamepaddisconnected", (e) => {
   if (selectedGamepadIndex === e.gamepad.index) {
     selectedGamepadIndex = null;
   }
+});
+
+// Manual refresh button logic
+document.querySelector("[data-refresh]")?.addEventListener("click", () => {
+  console.log("Manual refresh triggered");
+  // Just log to console as pollGamepad runs every frame anyway
+  const pads = navigator.getGamepads();
+  console.table(pads);
 });
 
 requestAnimationFrame(pollGamepad);

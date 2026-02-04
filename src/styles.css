@@ -99,6 +99,40 @@ p {
   background: #ef4444;
 }
 
+.secondary {
+  background: #334155;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 15px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.secondary:hover {
+  background: #475569;
+}
+
+.env-warning {
+  background: #78350f;
+  border: 1px solid #d97706;
+  color: #fef3c7;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.env-warning strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.env-warning p {
+  font-size: 13px;
+  margin: 0;
+  color: #fef3c7;
+}
+
 /* Gamepad Visual */
 .controller-container {
   display: flex;
@@ -217,6 +251,33 @@ select {
   border-radius: 4px;
   padding: 4px 8px;
   font-size: 12px;
+}
+
+.troubleshooting h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #9aa7d9;
+}
+
+.tips {
+  font-size: 12px;
+  padding-left: 20px;
+  margin: 0 0 15px;
+  color: #c7d0ff;
+}
+
+.tips li {
+  margin-bottom: 6px;
+}
+
+.debug-diagnostic {
+  background: #0f172a;
+  padding: 10px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 11px;
+  color: #94a3b8;
+  border: 1px solid #1e293b;
 }
 
 /* Custom scrollbar for config list */

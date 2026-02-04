@@ -27,10 +27,14 @@
             <div class="status-row">
               <span class="label">Gamepad</span>
               <strong data-pad>No gamepad detected</strong>
-              <small style="font-size: 10px; opacity: 0.7;">Press any button to connect</small>
-              <div data-debug-info style="font-size: 10px; opacity: 0.5; margin-top: 4px;">Slots: ...</div>
+              <small style="font-size: 11px; color: #4f6ef7; margin-top: 4px; display: block;">
+                Press any button to activate
+              </small>
             </div>
-            <button class="primary" data-active>Start camera control</button>
+            <div style="display: flex; gap: 8px;">
+              <button class="primary" data-active>Start camera control</button>
+              <button class="secondary" data-refresh title="Force re-scan for gamepads">Refresh</button>
+            </div>
           </section>
 
           <section class="panel controller-section">
@@ -60,6 +64,20 @@
                   <div class="v-btn a" data-button="0" title="A"><span data-label="0"></span></div>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section class="panel troubleshooting">
+            <h3>Troubleshooting Gamepad Issues</h3>
+            <ul class="tips">
+              <li><strong>Focus:</strong> This window must be focused for the gamepad to work. Click anywhere inside.</li>
+              <li><strong>Activation:</strong> The browser only sees your gamepad <em>after</em> you press a button on it.</li>
+              <li><strong>Conflicts:</strong> Close <strong>Steam</strong>, <strong>DS4Windows</strong>, or other controller software that might be hiding the device.</li>
+              <li><strong>Connection:</strong> If Bluetooth fails, try connecting via USB cable.</li>
+              <li><strong>Chrome/Edge:</strong> If it doesn't work here, it won't work in standard browsers either due to Chromium system limitations.</li>
+            </ul>
+            <div class="debug-diagnostic" data-debug-info>
+              Diagnostics: Initializing...
             </div>
           </section>
         </div>
