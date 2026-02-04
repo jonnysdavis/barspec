@@ -135,9 +135,9 @@ const addButtonConfig = (container, name, index, current) => {
 };
 const pollGamepad = () => {
     const pads = navigator.getGamepads();
-    const gamepad = pads[0];
+    const gamepad = Array.from(pads).find((p) => p !== null);
     if (!gamepad) {
-        padEl.textContent = "No gamepad detected";
+        padEl.textContent = "No gamepad detected (Press a button)";
         requestAnimationFrame(pollGamepad);
         return;
     }
