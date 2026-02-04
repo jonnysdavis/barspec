@@ -1,144 +1,197 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
+import fs from "fs";
 import robot from "robotjs";
+import { GamepadState, MappingConfig, DEFAULT_CONFIG, Action, StickAction } from "./types";
 
-interface CameraInput {
-  leftX: number;
-  leftY: number;
-  rightX: number;
-  rightY: number;
-  leftTrigger: number;
-  rightTrigger: number;
-  buttonA: boolean;
-  buttonY: boolean;
-  dpadX: number;
-  dpadY: number;
-  sensitivity: number;
-  deadzone: number;
-}
+const CONFIG_PATH = path.join(app.getPath("userData"), "config.json");
 
-const keyState = new Map<string, boolean>();
+let config: MappingConfig = { ...DEFAULT_CONFIG };
 let isActive = false;
-let invertY = false;
-let lastButtonY = false;
-let middleClickHeld = false;
-let altHeld = false;
+let leftStickMode: "mouse" | "arrows" = "mouse";
+let lastButtons: boolean[] = [];
 
-const ensureKey = (key: string, pressed: boolean) => {
-  const current = keyState.get(key) ?? false;
-  if (current !== pressed) {
-    robot.keyToggle(key, pressed ? "down" : "up");
-    keyState.set(key, pressed);
+const heldKeys = new Set<string>();
+const heldMouseButtons = new Set<string>();
+let isPanning = false;
+
+const loadConfig = () => {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      const data = fs.readFileSync(CONFIG_PATH, "utf-8");
+      const savedConfig = JSON.parse(data);
+      config = { ...DEFAULT_CONFIG, ...savedConfig };
+      console.log("Config loaded from", CONFIG_PATH);
+    }
+  } catch (err) {
+    console.error("Failed to load config:", err);
   }
 };
 
-const releaseAllKeys = () => {
-  for (const [key, pressed] of keyState.entries()) {
-    if (pressed) {
+const saveConfig = () => {
+  try {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    console.log("Config saved to", CONFIG_PATH);
+  } catch (err) {
+    console.error("Failed to save config:", err);
+  }
+};
+
+const toggleKey = (key: string, down: boolean) => {
+  if (down) {
+    if (!heldKeys.has(key)) {
+      robot.keyToggle(key, "down");
+      heldKeys.add(key);
+    }
+  } else {
+    if (heldKeys.has(key)) {
       robot.keyToggle(key, "up");
-      keyState.set(key, false);
+      heldKeys.delete(key);
     }
   }
-  if (middleClickHeld) {
-    robot.mouseToggle("up", "middle");
-    middleClickHeld = false;
-  }
-  if (altHeld) {
-    robot.keyToggle("alt", "up");
-    altHeld = false;
+};
+
+const toggleMouseButton = (button: string, down: boolean) => {
+  if (down) {
+    if (!heldMouseButtons.has(button)) {
+      robot.mouseToggle("down", button as any);
+      heldMouseButtons.add(button);
+    }
+  } else {
+    if (heldMouseButtons.has(button)) {
+      robot.mouseToggle("up", button as any);
+      heldMouseButtons.delete(button);
+    }
   }
 };
 
-const applyInput = (input: CameraInput) => {
-  if (!isActive) {
-    releaseAllKeys();
-    return;
+const releaseAllInputs = () => {
+  for (const key of heldKeys) {
+    robot.keyToggle(key, "up");
   }
-
-  // Handle Y-axis inversion toggle
-  if (input.buttonY && !lastButtonY) {
-    invertY = !invertY;
+  heldKeys.clear();
+  for (const btn of heldMouseButtons) {
+    robot.mouseToggle("up", btn as any);
   }
-  lastButtonY = input.buttonY;
+  heldMouseButtons.clear();
+  isPanning = false;
+};
 
-  const deadzone = Math.max(0, Math.min(input.deadzone, 0.5));
-  const sensitivity = Math.max(0.1, Math.min(input.sensitivity, 5));
+const applyStick = (x: number, y: number, action: StickAction) => {
+  if (action === "none") return;
 
-  const applyStickDeadzone = (val: number) => {
+  const deadzone = config.deadzone;
+  const sensitivity = config.sensitivity;
+
+  const processAxis = (val: number) => {
     if (Math.abs(val) < deadzone) return 0;
     const sign = val > 0 ? 1 : -1;
     return sign * ((Math.abs(val) - deadzone) / (1 - deadzone));
   };
 
-  const leftX = applyStickDeadzone(input.leftX);
-  const leftY = applyStickDeadzone(input.leftY);
-  const rightX = applyStickDeadzone(input.rightX);
-  const rightY = applyStickDeadzone(input.rightY);
+  const nx = processAxis(x);
+  const ny = processAxis(y);
 
-  // Mouse Look (Left Stick)
-  if (leftX !== 0 || leftY !== 0) {
-    const dx = Math.round(leftX * sensitivity * 10);
-    const dy = Math.round((invertY ? -leftY : leftY) * sensitivity * 10);
+  if (nx === 0 && ny === 0) {
+    if (action === "mouse_pan" && isPanning) {
+      toggleMouseButton("middle", false);
+      toggleKey("alt", false);
+      isPanning = false;
+    }
+    if (action === "arrow_move") {
+      toggleKey("up", false);
+      toggleKey("down", false);
+      toggleKey("left", false);
+      toggleKey("right", false);
+    }
+    return;
+  }
+
+  if (action === "mouse_move" || action === "mouse_pan") {
+    if (action === "mouse_pan" && !isPanning) {
+      toggleKey("alt", true);
+      toggleMouseButton("middle", true);
+      isPanning = true;
+    }
+    const dx = Math.round(nx * sensitivity * 15);
+    const dy = Math.round(ny * sensitivity * 15);
     if (dx !== 0 || dy !== 0) {
-      const mouse = robot.getMousePos();
-      robot.moveMouse(mouse.x + dx, mouse.y + dy);
+      const pos = robot.getMousePos();
+      robot.moveMouse(pos.x + dx, pos.y + dy);
     }
+  } else if (action === "arrow_move") {
+    toggleKey("up", ny < -0.5);
+    toggleKey("down", ny > 0.5);
+    toggleKey("left", nx < -0.5);
+    toggleKey("right", nx > 0.5);
+  }
+};
+
+const applyInput = (state: GamepadState) => {
+  if (!isActive) {
+    releaseAllInputs();
+    return;
   }
 
-  // Mouse Pan (Right Stick + Alt + Middle Click)
-  const rightActive = rightX !== 0 || rightY !== 0;
-  if (rightActive) {
-    if (!altHeld) {
-      robot.keyToggle("alt", "down");
-      altHeld = true;
-    }
-    if (!middleClickHeld) {
-      robot.mouseToggle("down", "middle");
-      middleClickHeld = true;
-    }
-    const dx = Math.round(rightX * sensitivity * 10);
-    const dy = Math.round((invertY ? -rightY : rightY) * sensitivity * 10);
-    if (dx !== 0 || dy !== 0) {
-      const mouse = robot.getMousePos();
-      robot.moveMouse(mouse.x + dx, mouse.y + dy);
-    }
-  } else {
-    // Only release if Button A is not also holding it
-    if (altHeld) {
-      robot.keyToggle("alt", "up");
-      altHeld = false;
-    }
-    if (middleClickHeld && !input.buttonA) {
-      robot.mouseToggle("up", "middle");
-      middleClickHeld = false;
-    }
-  }
+  // Handle Buttons
+  state.buttons.forEach((pressed, index) => {
+    const wasPressed = lastButtons[index] || false;
+    const action = config.buttonMappings[index];
 
-  // D-Pad (Arrow Keys)
-  ensureKey("up", input.dpadY < 0);
-  ensureKey("down", input.dpadY > 0);
-  ensureKey("left", input.dpadX < 0);
-  ensureKey("right", input.dpadX > 0);
+    if (!action || action === "none") return;
 
-  // Triggers (PageUp / PageDown)
-  ensureKey("pageup", input.leftTrigger > 0.3);
-  ensureKey("pagedown", input.rightTrigger > 0.3);
+    if (pressed && !wasPressed) {
+      // Button Down Event
+      switch (action) {
+        case "left_click": toggleMouseButton("left", true); break;
+        case "right_click": toggleMouseButton("right", true); break;
+        case "middle_click": toggleMouseButton("middle", true); break;
+        case "zoom_in_wheel": robot.scrollMouse(0, -1); break; // robotjs scroll is (x, y), y < 0 is up/zoom in
+        case "zoom_out_wheel": robot.scrollMouse(0, 1); break;
+        case "zoom_in_pgup": toggleKey("pageup", true); break;
+        case "zoom_out_pgdn": toggleKey("pagedown", true); break;
+        case "arrow_up": toggleKey("up", true); break;
+        case "arrow_down": toggleKey("down", true); break;
+        case "arrow_left": toggleKey("left", true); break;
+        case "arrow_right": toggleKey("right", true); break;
+        case "toggle_stick_mode":
+          leftStickMode = leftStickMode === "mouse" ? "arrows" : "mouse";
+          break;
+      }
+    } else if (!pressed && wasPressed) {
+      // Button Up Event
+      switch (action) {
+        case "left_click": toggleMouseButton("left", false); break;
+        case "right_click": toggleMouseButton("right", false); break;
+        case "middle_click": toggleMouseButton("middle", false); break;
+        case "zoom_in_pgup": toggleKey("pageup", false); break;
+        case "zoom_out_pgdn": toggleKey("pagedown", false); break;
+        case "arrow_up": toggleKey("up", false); break;
+        case "arrow_down": toggleKey("down", false); break;
+        case "arrow_left": toggleKey("left", false); break;
+        case "arrow_right": toggleKey("right", false); break;
+      }
+    }
+  });
 
-  // Button A (Middle Click)
-  if (input.buttonA && !middleClickHeld) {
-    robot.mouseToggle("down", "middle");
-    middleClickHeld = true;
-  } else if (!input.buttonA && middleClickHeld && !rightActive) {
-    robot.mouseToggle("up", "middle");
-    middleClickHeld = false;
-  }
+  lastButtons = [...state.buttons];
+
+  // Handle Sticks
+  const leftX = state.axes[0] || 0;
+  const leftY = state.axes[1] || 0;
+  const rightX = state.axes[2] || 0;
+  const rightY = state.axes[3] || 0;
+
+  const currentLeftAction = leftStickMode === "mouse" ? config.leftStickAction : "arrow_move";
+  applyStick(leftX, leftY, currentLeftAction);
+  applyStick(rightX, rightY, config.rightStickAction);
 };
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
-    width: 520,
-    height: 520,
-    resizable: false,
+    width: 900,
+    height: 800,
+    resizable: true,
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, "preload.js"),
@@ -149,6 +202,7 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
+  loadConfig();
   createWindow();
 
   app.on("activate", () => {
@@ -164,13 +218,22 @@ app.on("window-all-closed", () => {
   }
 });
 
-ipcMain.on("camera-input", (_event, input: CameraInput) => {
-  applyInput(input);
+ipcMain.on("get-config", (event) => {
+  event.reply("config-loaded", config);
+});
+
+ipcMain.on("save-config", (_event, newConfig: MappingConfig) => {
+  config = newConfig;
+  saveConfig();
 });
 
 ipcMain.on("camera-active", (_event, active: boolean) => {
   isActive = active;
   if (!isActive) {
-    releaseAllKeys();
+    releaseAllInputs();
   }
+});
+
+ipcMain.on("camera-input", (_event, input: GamepadState) => {
+  applyInput(input);
 });
