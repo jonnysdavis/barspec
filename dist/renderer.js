@@ -7,6 +7,7 @@ const sensitivityEl = document.querySelector("[data-sensitivity]");
 const deadzoneEl = document.querySelector("[data-deadzone]");
 const sensitivityValue = document.querySelector("[data-sensitivity-value]");
 const deadzoneValue = document.querySelector("[data-deadzone-value]");
+const debugInfoEl = document.querySelector("[data-debug-info]");
 const actionNames = {
     left_click: "Left Click",
     right_click: "Right Click",
@@ -31,6 +32,7 @@ const stickActionNames = {
 let isActive = false;
 let lastStartPressed = false;
 let currentConfig = null;
+let selectedGamepadIndex = null;
 const setActive = (active) => {
     isActive = active;
     activeBtn.textContent = isActive ? "Stop camera control" : "Start camera control";
@@ -135,13 +137,33 @@ const addButtonConfig = (container, name, index, current) => {
 };
 const pollGamepad = () => {
     const pads = navigator.getGamepads();
-    const gamepad = Array.from(pads).find((p) => p !== null);
+    let gamepad = null;
+    // Debug info
+    let debugText = "Slots: ";
+    for (let i = 0; i < pads.length; i++) {
+        debugText += `[${i}: ${pads[i] ? 'OK' : 'null'}] `;
+    }
+    if (debugInfoEl)
+        debugInfoEl.textContent = debugText;
+    // Try to find the selected gamepad or the first available one
+    if (selectedGamepadIndex !== null && pads[selectedGamepadIndex]) {
+        gamepad = pads[selectedGamepadIndex];
+    }
+    else {
+        for (let i = 0; i < pads.length; i++) {
+            if (pads[i]) {
+                gamepad = pads[i];
+                selectedGamepadIndex = i;
+                break;
+            }
+        }
+    }
     if (!gamepad) {
         padEl.textContent = "No gamepad detected (Press a button)";
         requestAnimationFrame(pollGamepad);
         return;
     }
-    padEl.textContent = `${gamepad.id}`;
+    padEl.textContent = `${gamepad.id} (Slot ${gamepad.index})`;
     const startPressed = gamepad.buttons[9]?.pressed ?? false;
     if (startPressed && !lastStartPressed) {
         setActive(!isActive);
@@ -175,4 +197,16 @@ const pollGamepad = () => {
     }
     requestAnimationFrame(pollGamepad);
 };
+window.addEventListener("gamepadconnected", (e) => {
+    console.log("Gamepad connected:", e.gamepad.id);
+    if (selectedGamepadIndex === null) {
+        selectedGamepadIndex = e.gamepad.index;
+    }
+});
+window.addEventListener("gamepaddisconnected", (e) => {
+    console.log("Gamepad disconnected:", e.gamepad.id);
+    if (selectedGamepadIndex === e.gamepad.index) {
+        selectedGamepadIndex = null;
+    }
+});
 requestAnimationFrame(pollGamepad);

@@ -51,6 +51,7 @@ const sensitivityEl = document.querySelector("[data-sensitivity]") as HTMLInputE
 const deadzoneEl = document.querySelector("[data-deadzone]") as HTMLInputElement;
 const sensitivityValue = document.querySelector("[data-sensitivity-value]") as HTMLElement;
 const deadzoneValue = document.querySelector("[data-deadzone-value]") as HTMLElement;
+const debugInfoEl = document.querySelector("[data-debug-info]") as HTMLElement;
 
 const actionNames: Record<Action, string> = {
   left_click: "Left Click",
@@ -78,6 +79,7 @@ const stickActionNames: Record<StickAction, string> = {
 let isActive = false;
 let lastStartPressed = false;
 let currentConfig: MappingConfig | null = null;
+let selectedGamepadIndex: number | null = null;
 
 const setActive = (active: boolean) => {
   isActive = active;
@@ -194,7 +196,27 @@ const addButtonConfig = (container: HTMLElement, name: string, index: number, cu
 
 const pollGamepad = () => {
   const pads = navigator.getGamepads();
-  const gamepad = Array.from(pads).find((p) => p !== null);
+  let gamepad: Gamepad | null = null;
+
+  // Debug info
+  let debugText = "Slots: ";
+  for (let i = 0; i < pads.length; i++) {
+    debugText += `[${i}: ${pads[i] ? 'OK' : 'null'}] `;
+  }
+  if (debugInfoEl) debugInfoEl.textContent = debugText;
+
+  // Try to find the selected gamepad or the first available one
+  if (selectedGamepadIndex !== null && pads[selectedGamepadIndex]) {
+    gamepad = pads[selectedGamepadIndex];
+  } else {
+    for (let i = 0; i < pads.length; i++) {
+      if (pads[i]) {
+        gamepad = pads[i];
+        selectedGamepadIndex = i;
+        break;
+      }
+    }
+  }
 
   if (!gamepad) {
     padEl.textContent = "No gamepad detected (Press a button)";
@@ -202,7 +224,7 @@ const pollGamepad = () => {
     return;
   }
 
-  padEl.textContent = `${gamepad.id}`;
+  padEl.textContent = `${gamepad.id} (Slot ${gamepad.index})`;
 
   const startPressed = gamepad.buttons[9]?.pressed ?? false;
   if (startPressed && !lastStartPressed) {
@@ -239,5 +261,19 @@ const pollGamepad = () => {
 
   requestAnimationFrame(pollGamepad);
 };
+
+window.addEventListener("gamepadconnected", (e) => {
+  console.log("Gamepad connected:", e.gamepad.id);
+  if (selectedGamepadIndex === null) {
+    selectedGamepadIndex = e.gamepad.index;
+  }
+});
+
+window.addEventListener("gamepaddisconnected", (e) => {
+  console.log("Gamepad disconnected:", e.gamepad.id);
+  if (selectedGamepadIndex === e.gamepad.index) {
+    selectedGamepadIndex = null;
+  }
+});
 
 requestAnimationFrame(pollGamepad);
