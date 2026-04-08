@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Barspec</title>
@@ -14,67 +14,122 @@
     <main class="app">
       <header>
         <h1>Barspec</h1>
-        <p>Use a gamepad to drive the Beyond All Reason spectator camera.</p>
+        <p>Gamepad camera control for Beyond All Reason.</p>
       </header>
 
-      <section class="panel">
-        <div class="status">
-          <span class="label">Status</span>
-          <strong data-status>Idle</strong>
-        </div>
-        <div class="status">
-          <span class="label">Gamepad</span>
-          <strong data-pad>No gamepad detected</strong>
-        </div>
-      </section>
+      <section class="main-layout">
+        <div class="left-panel">
+          <section class="panel status-panel">
+            <div class="status-row">
+              <span class="label">Status</span>
+              <strong data-status>Idle</strong>
+            </div>
+            <div class="status-row">
+              <span class="label">Gamepad</span>
+              <strong data-pad>No gamepad detected</strong>
+              <small style="font-size: 11px; color: #4f6ef7; margin-top: 4px; display: block;">
+                Press any button to activate
+              </small>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="primary" data-active>Start camera control</button>
+              <button class="secondary" data-refresh title="Force re-scan for gamepads">Refresh</button>
+            </div>
+          </section>
 
-      <section class="panel">
-        <label class="slider">
-          <span>Sensitivity</span>
-          <input
-            data-sensitivity
-            type="range"
-            min="0.4"
-            max="2.5"
-            step="0.05"
-            value="1.0"
-          />
-          <span class="value" data-sensitivity-value>1.00</span>
-        </label>
-        <label class="slider">
-          <span>Deadzone</span>
-          <input
-            data-deadzone
-            type="range"
-            min="0.05"
-            max="0.4"
-            step="0.01"
-            value="0.2"
-          />
-          <span class="value" data-deadzone-value>0.20</span>
-        </label>
-      </section>
+          <section class="panel controller-section">
+            <div class="controller-container">
+              <!-- Visual representation of the controller -->
+              <div class="gamepad-visual">
+                <div class="node l2" data-button="6" title="L2"><span data-label="6"></span></div>
+                <div class="node r2" data-button="7" title="R2"><span data-label="7"></span></div>
+                <div class="node l1" data-button="4" title="L1"><span data-label="4"></span></div>
+                <div class="node r1" data-button="5" title="R1"><span data-label="5"></span></div>
 
-      <section class="panel">
-        <button class="primary" data-active>Start camera control</button>
-        <div class="hint">
-          Press the gamepad <strong>Start</strong> button to toggle control.
+                <div class="node ls" data-stick="ls" title="Left Stick"><div class="dot"></div><span data-label="ls"></span></div>
+                <div class="node rs" data-stick="rs" title="Right Stick"><div class="dot"></div><span data-label="rs"></span></div>
+
+                <div class="node dpad" title="D-Pad">
+                  <div class="d-btn up" data-button="12"></div>
+                  <div class="d-btn down" data-button="13"></div>
+                  <div class="d-btn left" data-button="14"></div>
+                  <div class="d-btn right" data-button="15"></div>
+                  <span data-label="dpad">Arrows</span>
+                </div>
+
+                <div class="node abxy" title="Buttons">
+                  <div class="v-btn y" data-button="3" title="Y"><span data-label="3"></span></div>
+                  <div class="v-btn x" data-button="2" title="X"><span data-label="2"></span></div>
+                  <div class="v-btn b" data-button="1" title="B"><span data-label="1"></span></div>
+                  <div class="v-btn a" data-button="0" title="A"><span data-label="0"></span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel troubleshooting">
+            <h3>Troubleshooting Gamepad Issues</h3>
+            <ul class="tips">
+              <li><strong>Focus:</strong> This window must be focused for the gamepad to work. Click anywhere inside.</li>
+              <li><strong>Activation:</strong> The browser only sees your gamepad <em>after</em> you press a button on it.</li>
+              <li><strong>Conflicts:</strong> Close <strong>Steam</strong>, <strong>DS4Windows</strong>, or other controller software that might be hiding the device.</li>
+              <li><strong>Connection:</strong> If Bluetooth fails, try connecting via USB cable.</li>
+              <li><strong>Chrome/Edge:</strong> If it doesn't work here, it won't work in standard browsers either due to Chromium system limitations.</li>
+            </ul>
+            <div class="debug-diagnostic" data-debug-info>
+              Diagnostics: Initializing...
+            </div>
+          </section>
         </div>
-      </section>
 
-      <section class="panel">
-        <h2>Default bindings</h2>
-        <ul>
-          <li>Left stick: Camera look (Mouse)</li>
-          <li>Right stick: Camera pan (Alt + Mid-click + Mouse)</li>
-          <li>D-Pad: Camera pan (Arrow keys)</li>
-          <li>A Button: Middle click (Hold)</li>
-          <li>Triggers: Zoom (Page Up/Down)</li>
-          <li>Y Button: Invert Y-axis</li>
-        </ul>
+        <div class="right-panel">
+          <section class="panel settings-panel">
+            <h2>Settings</h2>
+            <label class="slider">
+              <span>Sensitivity</span>
+              <input data-sensitivity type="range" min="0.1" max="3.0" step="0.05" value="1.0" />
+              <span class="value" data-sensitivity-value>1.00</span>
+            </label>
+            <label class="slider">
+              <span>Deadzone</span>
+              <input data-deadzone type="range" min="0.01" max="0.5" step="0.01" value="0.15" />
+              <span class="value" data-deadzone-value>0.15</span>
+            </label>
+          </section>
+
+          <section class="panel config-panel">
+            <h2>Button Mappings</h2>
+            <div class="config-list" data-config-list>
+              <!-- Populated by JS -->
+            </div>
+          </section>
+        </div>
       </section>
     </main>
 
+    <script>
+      // Shim for CommonJS output in browser mode
+      if (typeof exports === 'undefined') {
+        window.exports = {};
+      }
+    </script>
     <script src="renderer.js"></script>
+    <script>
+      // Fail-safe to check if renderer.js loaded
+      setTimeout(() => {
+        const diagnostic = document.querySelector('[data-debug-info]');
+        if (!window.barspecLoaded && diagnostic && diagnostic.textContent.includes('Initializing...')) {
+          diagnostic.innerHTML = `
+            <div style="color: #ff4d4d; border: 1px solid #ff4d4d; padding: 10px; border-radius: 4px; background: rgba(255,0,0,0.1);">
+              <strong>❌ Error: Renderer script failed to load.</strong>
+              <p style="margin: 5px 0 0 0; font-size: 12px;">
+                You may be opening the <code>src/index.html</code> file directly.
+                Please run the application using <code>npm start</code> or open <code>dist/index.html</code> after running <code>npm run build</code>.
+              </p>
+            </div>
+          `;
+        }
+      }, 2000);
+    </script>
   </body>
 </html>
